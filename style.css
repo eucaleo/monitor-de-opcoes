@@ -1,0 +1,235 @@
+@import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap');
+
+/* ========================================
+   BASE + LIGHT THEME
+   ======================================== */
+body {
+    font-family: 'Roboto', sans-serif;
+    background-color: #e6f0fa;
+    margin: 0;
+    padding: 20px;
+    overflow-x: hidden;
+    font-size: 14px;
+    color: #333;
+    transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+.title { font-size: 1.8rem; text-align: center; margin: 20px 0; color: #333; }
+.subtitle { font-size: 1rem; text-align: center; margin: 10px 0; color: #555; }
+
+/* ========================================
+   VALIDATION TICKS
+   ======================================== */
+.validation-ok { color: #28a745 !important; font-size: 18px !important; }
+.validation-error { color: #dc3545 !important; font-size: 18px !important; }
+
+/* ========================================
+   FORMS & INPUTS
+   ======================================== */
+.label {
+    font-weight: bold;
+    font-size: 0.9rem;
+    text-align: right;
+    padding-right: 10px;
+}
+
+/* Altura padrão para todos os controles */
+.form-control,
+.form-control-sm,
+.Select-control {
+    height: 38px !important;
+    border-radius: 6px !important;
+    font-size: 0.875rem !important;
+}
+
+/* ========================================
+   BOTÕES
+   ======================================== */
+.btn-sm {
+    height: 38px !important;
+    padding: 0 14px !important;
+    font-size: 0.875rem !important;
+    border-radius: 6px !important;
+}
+
+/* ========================================
+   CARDS
+   ======================================== */
+.card {
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    transition: all 0.3s ease;
+    background-color: #fff;
+}
+
+/* ========================================
+   TABELA DASH
+   ======================================== */
+.dash-table-container {
+    margin: 20px auto;
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+}
+
+.dash-table-container th {
+    background-color: #f8f9fa !important;
+    color: #333 !important;
+    font-weight: bold !important;
+}
+
+.dash-table-container td {
+    background-color: #fff !important;
+    color: #333 !important;
+}
+
+.dash-table-container tr:nth-child(even) td { background-color: #f8f9fa !important; }
+.dash-table-container tr:hover td { background-color: #e3f2fd !important; color: #1976d2 !important; }
+
+.dash-filter { display: none !important; }
+
+/* ========================================
+   DARK MODE
+   ======================================== */
+.dark-theme {
+    background-color: #1a1a1a !important;
+}
+
+.dark-theme body { background-color: #1a1a1a; color: #ecf0f1; }
+
+.dark-theme .dash-table-container {
+    background-color: #2c3e50 !important;
+}
+
+.dark-theme .dash-table-container th {
+    background-color: #34495e !important;
+    color: #ecf0f1 !important;
+}
+
+.dark-theme .dash-table-container td {
+    background-color: #2c3e50 !important;
+    color: #ecf0f1 !important;
+}
+
+.dark-theme .dash-table-container tr:nth-child(even) td { background-color: #34495e !important; }
+.dark-theme .dash-table-container tr:hover td { background-color: #3d566e !important; }
+
+.dark-theme .card {
+    background-color: #2c3e50 !important;
+    color: #ecf0f1 !important;
+    border-color: #34495e !important;
+}
+
+.dark-theme .form-control,
+.dark-theme .input,
+.dark-theme .Select-control {
+    background-color: #34495e !important;
+    color: #ecf0f1 !important;
+    border-color: #4a6741 !important;
+}
+
+.dark-theme .form-control:focus,
+.dark-theme .Select-control:focus-within {
+    border-color: #007bff !important;
+    box-shadow: 0 0 0 0.2rem rgba(0,123,255,0.25) !important;
+}
+
+.dark-theme .modal-content,
+.dark-theme .modal-header,
+.dark-theme .modal-body,
+.dark-theme .modal-footer {
+    background-color: #2c3e50 !important;
+    color: #ecf0f1 !important;
+    border-color: #4a6741 !important;
+}
+
+/* ========================================
+   DATEPICKERRANGE — PERFEITO
+   ======================================== */
+#periodo-date-range,
+.DateRangePicker,
+.DateRangePickerInput,
+.DateRangePickerInput__withBorder {
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+}
+
+.DateInput,
+.DateInput_input {
+    background: transparent !important;
+    border: none !important;
+}
+
+.DateInput_input {
+    background-color: var(--bs-body-bg) !important;
+    color: var(--bs-body-color) !important;
+    border: 1px solid var(--bs-border-color) !important;
+    border-radius: 6px !important;
+    height: 38px !important;
+    padding: 0.375rem 0.75rem !important;
+    font-size: 0.875rem !important;
+}
+
+.DateRangePickerInput_arrow_svg { fill: var(--bs-body-color) !important; }
+
+/* DARK MODE DATEPICKER */
+.dark-theme .DateInput_input {
+    background-color: #34495e !important;
+    color: #ecf0f1 !important;
+    border-color: #4a6741 !important;
+}
+
+/* ========================================
+   DROPDOWN (EXCEL/CSV) — REMOVE CAIXA DUPLA
+   ======================================== */
+.Select-control,
+.Select-menu-outer,
+.Select-menu {
+    background-color: var(--bs-body-bg) !important;
+    color: var(--bs-body-color) !important;
+    border: 1px solid var(--bs-border-color) !important;
+    border-radius: 6px !important;
+    height: 38px !important;
+}
+
+.Select-value-label {
+    line-height: 38px !important;
+    padding-left: 12px !important;
+}
+
+.Select-input > input {
+    height: 36px !important;
+}
+
+.Select-arrow-zone {
+    height: 38px !important;
+}
+
+.Select--single > .Select-control .Select-value,
+.Select-placeholder {
+    line-height: 38px !important;
+}
+
+/* DARK MODE DROPDOWN */
+.dark-theme .Select-control,
+.dark-theme .Select-menu-outer {
+    background-color: #34495e !important;
+    color: #ecf0f1 !important;
+    border-color: #4a6741 !important;
+}
+
+/* ========================================
+   RESPONSIVO
+   ======================================== */
+@media (max-width: 768px) {
+    .btn-sm { font-size: 0.8rem !important; padding: 0 8px !important; }
+    .form-control-sm,
+    .DateInput_input,
+    .Select-control { font-size: 0.8rem !important; }
+}
+
+/* ========================================
+   TRANSITIONS
+   ======================================== */
+* { transition: all 0.3s ease; }
