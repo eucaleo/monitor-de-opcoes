@@ -1,23 +1,13 @@
+# app_layout.py
 import dash
-from dash import Dash, html, dcc, dash_table, Input, Output, State
-from datetime import date, timedelta, datetime as dt_now
+from dash import html, dcc, dash_table
 import dash_bootstrap_components as dbc
-import logging
-from logging.handlers import RotatingFileHandler
+from datetime import date, timedelta, datetime as dt_now
 
-# Logging
-logger = logging.getLogger()
-logger.setLevel(logging.INFO)
-handler = RotatingFileHandler('gizmo.log', maxBytes=1000000, backupCount=5)
-formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
-handler.setFormatter(formatter)
-logger.addHandler(handler)
-
-# App
+# Criação do app (sem external_scripts — assets já cuida do JS)
 app = dash.Dash(
     __name__,
     external_stylesheets=[dbc.themes.BOOTSTRAP],
-    external_scripts=['/assets/clientside.js'],
     suppress_callback_exceptions=True
 )
 
@@ -53,7 +43,7 @@ app.layout = dbc.Container([
         dbc.Col(dbc.Button("Atualizar Cotações", id="atualizar-cotacoes-btn", color='info', size="sm"), width=2),
     ], className="g-2 mb-4", justify="center", align="center"),
 
-    # Cards
+    # Cards (linha 1)
     dbc.Row([
         dbc.Col([html.Small("Compra Call", className="text-muted text-center d-block mb-1"),
                  html.Div(id='compra-call-value', className="card p-2 text-center fw-bold", style={'fontSize': '14px'})], width=1),
@@ -67,23 +57,37 @@ app.layout = dbc.Container([
                  html.Div(id='g_p-estrutura-value', className="card p-2 text-center fw-bold", style={'fontSize': '14px'})], width=2),
         dbc.Col([html.Small("G/P Simples", className="text-muted text-center d-block mb-1"),
                  html.Div(id='g_p-simples-value', className="card p-2 text-center fw-bold", style={'fontSize': '14px'})], width=2),
+    ], className="g-3 mb-3", justify="center"),
+
+    # Cards (linha 2)
+    dbc.Row([
+        dbc.Col([html.Small("Fluxo (período)", className="text-muted text-center d-block mb-1"),
+                 html.Div(id='fluxo-periodo-value', className="card p-2 text-center fw-bold", style={'fontSize': '14px'})], width=2),
+        dbc.Col([html.Small("Posição Aberta (agora)", className="text-muted text-center d-block mb-1"),
+                 html.Div(id='posicao-aberta-value', className="card p-2 text-center fw-bold", style={'fontSize': '14px'})], width=2),
     ], className="g-3 mb-4", justify="center"),
 
     # Busca + Export
     dbc.Row([
         dbc.Col(dbc.Input(id='busca-ticker', type='text', placeholder='Buscar Ticker', className="form-control form-control-sm"), width=2),
-        dbc.Col(dcc.Dropdown(id='export-format', options=[{'label': 'Excel', 'value': 'excel'}, {'label': 'CSV', 'value': 'csv'}],
-                            value='excel', clearable=False), width=2),
-        dbc.Col(html.Div(id='output-recalcular', className="text-danger text-center"), width=2)
-    ], justify="center", className="mb-4"),
+        dbc.Col(dcc.Dropdown(
+            id='export-format',
+            options=[{'label': 'Excel', 'value': 'excel'}, {'label': 'CSV', 'value': 'csv'}],
+            value='excel',
+            clearable=False
+        ), width=2),
+        dbc.Col(html.Div(id='output-recalcular', className="text-danger text-center"), width=3)
+    ], justify="center", className="mb-3"),
 
-    # TABELA — SELEÇÃO DE LINHA COM CLIQUE EM QUALQUER LUGAR
+    # Tabela
     dbc.Row([
         dbc.Col(dash_table.DataTable(
             id='tabela-operacoes',
             columns=[
+                {'name': 'id', 'id': 'id'},
                 {'name': 'TICKER', 'id': 'TICKER'},
-                {'name': 'OPERAÇÃO/DIREÇÃO', 'id': 'OPERAÇÃO/DIREÇÃO'},
+                {'name': 'OPERAÇÃO', 'id': 'OPERAÇÃO'},
+                {'name': 'DIREÇÃO', 'id': 'DIREÇÃO'},
                 {'name': 'STRIKE', 'id': 'STRIKE'},
                 {'name': 'QUANTIDADE', 'id': 'QUANTIDADE'},
                 {'name': 'VALOR OPÇÃO', 'id': 'VALOR OPÇÃO'},
@@ -94,6 +98,7 @@ app.layout = dbc.Container([
                 {'name': 'ESTRUTURA', 'id': 'ESTRUTURA'},
                 {'name': 'ROLAGEM', 'id': 'ROLAGEM'}
             ],
+            hidden_columns=['id'],
             style_table={'overflowY': 'auto', 'height': '330px'},
             fixed_rows={'headers': True},
             style_cell={'textAlign': 'center', 'padding': '5px', 'fontSize': '13px'},
@@ -104,36 +109,29 @@ app.layout = dbc.Container([
             ],
             page_size=10,
             sort_action='native',
-            row_selectable='multi',
+            row_selectable='single',
             selected_rows=[],
             persistence=True,
             persistence_type='session'
         ), width=12)
     ]),
 
-    # TODOS OS STORES E INTERVALS
-    dcc.Interval(id='initial-load-interval', interval=1000, n_intervals=0, disabled=True),
+    # Stores/Intervals
     dcc.Interval(id='message-clear-interval', interval=3000, n_intervals=0, disabled=True),
-    dcc.Store(id='init-table-trigger', data=''),
-    dcc.Store(id='trigger-recalcular', data=0),
-    dcc.Store(id='selected-row', data=None),
-    html.Div(id='table-update-trigger-nova', style={'display': 'none'}),
-    html.Div(id='table-update-trigger-alterar', style={'display': 'none'}),
-    html.Div(id='dummy-focus-ticker', style={'display': 'none'}),
-    html.Div(id='dummy-initial-load', style={'display': 'none'}),    
-# Modal de Nova Operação
+    dcc.Store(id='selected-row-id', data=None),
+    dcc.Store(id='table-refresh-seq', data=0),
+    
+    # Modal de Nova Operação
     dbc.Modal(
         [
             dbc.ModalHeader("Nova Operação", close_button=True),
             dbc.ModalBody([
                 dbc.Form(className="form-group", style={'padding': '15px'}, children=[
-                    # TICKER
                     dbc.Row([
                         dbc.Col(html.Label("TICKER", className="label"), width=4, style={'padding': '5px'}),
                         dbc.Col(dcc.Input(id='nova-ticker', type='text', className="form-control"), width=6, style={'padding': '5px', 'maxWidth': '100%'}),
                         dbc.Col(html.Div(id='nova-ticker-val', className="validation-col text-center"), width=2, style={'padding': '5px'}),
                     ], style={'marginBottom': '15px', 'alignItems': 'center'}),
-                    # OPERAÇÃO - DESABILITADO após extração
                     dbc.Row([
                         dbc.Col(html.Label("OPERAÇÃO", className="label"), width=4, style={'padding': '5px'}),
                         dbc.Col(dcc.Dropdown(
@@ -146,49 +144,41 @@ app.layout = dbc.Container([
                         ), width=6, style={'padding': '5px', 'maxWidth': '100%'}),
                         dbc.Col(html.Div(id='nova-operacao-val', className="validation-col text-center"), width=2, style={'padding': '5px'}),
                     ], style={'marginBottom': '15px', 'alignItems': 'center'}),
-                    # DIREÇÃO
                     dbc.Row([
                         dbc.Col(html.Label("DIREÇÃO", className="label"), width=4, style={'padding': '5px'}),
                         dbc.Col(dcc.Dropdown(id='nova-direcao', options=[{'label': 'Compra', 'value': 'Compra'}, {'label': 'Venda', 'value': 'Venda'}], className="form-control"), width=6, style={'padding': '5px', 'maxWidth': '100%'}),
                         dbc.Col(html.Div(id='nova-direcao-val', className="validation-col text-center"), width=2, style={'padding': '5px'}),
                     ], style={'marginBottom': '15px', 'alignItems': 'center'}),
-                    # STRIKE - VAZIO após extração
                     dbc.Row([
                         dbc.Col(html.Label("STRIKE", className="label"), width=4, style={'padding': '5px'}),
                         dbc.Col(dcc.Input(id='nova-strike', type='number', step=0.0001, className="form-control"), width=6, style={'padding': '5px', 'maxWidth': '100%'}),
                         dbc.Col(html.Div(id='nova-strike-val', className="validation-col text-center"), width=2, style={'padding': '5px'}),
                     ], style={'marginBottom': '15px', 'alignItems': 'center'}),
-                    # QUANTIDADE
                     dbc.Row([
                         dbc.Col(html.Label("QUANTIDADE", className="label"), width=4, style={'padding': '5px'}),
                         dbc.Col(dcc.Input(id='nova-quantidade', type='number', className="form-control"), width=6, style={'padding': '5px', 'maxWidth': '100%'}),
                         dbc.Col(html.Div(id='nova-quantidade-val', className="validation-col text-center"), width=2, style={'padding': '5px'}),
                     ], style={'marginBottom': '15px', 'alignItems': 'center'}),
-                    # VALOR OPÇÃO
                     dbc.Row([
                         dbc.Col(html.Label("VALOR OPÇÃO", className="label"), width=4, style={'padding': '5px'}),
                         dbc.Col(dcc.Input(id='nova-valor-opcao', type='number', step=0.0001, className="form-control"), width=6, style={'padding': '5px', 'maxWidth': '100%'}),
                         dbc.Col(html.Div(id='nova-valor-opcao-val', className="validation-col text-center"), width=2, style={'padding': '5px'}),
                     ], style={'marginBottom': '15px', 'alignItems': 'center'}),
-                    # DATA OP
                     dbc.Row([
                         dbc.Col(html.Label("DATA OP", className="label"), width=4, style={'padding': '5px'}),
                         dbc.Col(dcc.Input(id='nova-data-op', placeholder="DD/MM/YYYY", type='text', className="form-control", value=dt_now.now().strftime('%d/%m/%Y')), width=6, style={'padding': '5px', 'maxWidth': '100%'}),
                         dbc.Col(html.Div(id='nova-data-op-val', className="validation-col text-center"), width=2, style={'padding': '5px'}),
                     ], style={'marginBottom': '15px', 'alignItems': 'center'}),
-                    # DATA EXERC - EXTRAÍDA AUTOMATICAMENTE
                     dbc.Row([
                         dbc.Col(html.Label("DATA EXERC", className="label"), width=4, style={'padding': '5px'}),
                         dbc.Col(dcc.Input(id='nova-data-exerc', placeholder="DD/MM/YYYY", type='text', className="form-control", readOnly=True), width=6, style={'padding': '5px', 'maxWidth': '100%', 'backgroundColor': '#e9ecef'}),
                         dbc.Col(html.Div(id='nova-data-exerc-val', className="validation-col text-center"), width=2, style={'padding': '5px'}),
                     ], style={'marginBottom': '15px', 'alignItems': 'center'}),
-                    # ESTRUTURA
                     dbc.Row([
                         dbc.Col(html.Label("ESTRUTURA", className="label"), width=4, style={'padding': '5px'}),
                         dbc.Col(dcc.Input(id='nova-estrutura', type='text', className="form-control"), width=6, style={'padding': '5px', 'maxWidth': '100%'}),
                         dbc.Col(html.Div(id='nova-estrutura-val', className="validation-col text-center"), width=2, style={'padding': '5px'}),
                     ], style={'marginBottom': '15px', 'alignItems': 'center'}),
-                    # ROLAGEM
                     dbc.Row([
                         dbc.Col(html.Label("ROLAGEM", className="label"), width=4, style={'padding': '5px'}),
                         dbc.Col(dcc.Input(id='nova-rolagem', type='text', className="form-control"), width=6, style={'padding': '5px', 'maxWidth': '100%'}),
@@ -207,6 +197,7 @@ app.layout = dbc.Container([
         is_open=False,
         size="md",
     ),
+
     # Modal Alterar Operação
     dbc.Modal(
         [
@@ -214,54 +205,43 @@ app.layout = dbc.Container([
             dbc.ModalBody([
                 dbc.Form(className="form-group", style={'padding': '15px'}, children=[
                     dbc.Row([
-                        dbc.Col(html.Label("TICKER", className="label"), width=4, style={'padding': '5px'}),
-                        dbc.Col(html.Span(id='alterar-ticker', className="form-control", style={'backgroundColor': '#e9ecef', 'padding': '6px'}), width=6, style={'padding': '5px'}),
-                        dbc.Col(html.Div(id='alterar-ticker-val', className="validation-col text-center"), width=2, style={'padding': '5px'}),
-                    ], style={'marginBottom': '15px', 'alignItems': 'center'}),
+                        dbc.Col(html.Label("TICKER", className="label"), width=4),
+                        dbc.Col(html.Span(id='alterar-ticker', className="form-control", style={'backgroundColor': '#e9ecef', 'padding': '6px'}), width=6),
+                    ], className='mb-2'),
                     dbc.Row([
-                        dbc.Col(html.Label("OPERAÇÃO", className="label"), width=4, style={'padding': '5px'}),
-                        dbc.Col(html.Span(id='alterar-operacao', className="form-control", style={'backgroundColor': '#e9ecef', 'padding': '6px'}), width=6, style={'padding': '5px'}),
-                        dbc.Col(html.Div(id='alterar-operacao-val', className="validation-col text-center"), width=2, style={'padding': '5px'}),
-                    ], style={'marginBottom': '15px', 'alignItems': 'center'}),
+                        dbc.Col(html.Label("OPERAÇÃO", className="label"), width=4),
+                        dbc.Col(html.Span(id='alterar-operacao', className="form-control", style={'backgroundColor': '#e9ecef', 'padding': '6px'}), width=6),
+                    ], className='mb-2'),
                     dbc.Row([
-                        dbc.Col(html.Label("DIREÇÃO", className="label"), width=4, style={'padding': '5px'}),
-                        dbc.Col(html.Span(id='alterar-direcao', className="form-control", style={'backgroundColor': '#e9ecef', 'padding': '6px'}), width=6, style={'padding': '5px'}),
-                        dbc.Col(html.Div(id='alterar-direcao-val', className="validation-col text-center"), width=2, style={'padding': '5px'}),
-                    ], style={'marginBottom': '15px', 'alignItems': 'center'}),
+                        dbc.Col(html.Label("DIREÇÃO", className="label"), width=4),
+                        dbc.Col(html.Span(id='alterar-direcao', className="form-control", style={'backgroundColor': '#e9ecef', 'padding': '6px'}), width=6),
+                    ], className='mb-2'),
                     dbc.Row([
-                        dbc.Col(html.Label("QUANTIDADE", className="label"), width=4, style={'padding': '5px'}),
-                        dbc.Col(dcc.Input(id='alterar-quantidade', type='number', className="form-control"), width=6, style={'padding': '5px'}),
-                        dbc.Col(html.Div(id='alterar-quantidade-val', className="validation-col text-center"), width=2, style={'padding': '5px'}),
-                    ], style={'marginBottom': '15px', 'alignItems': 'center'}),
+                        dbc.Col(html.Label("QUANTIDADE", className="label"), width=4),
+                        dbc.Col(dcc.Input(id='alterar-quantidade', type='number', className="form-control"), width=6),
+                    ], className='mb-2'),
                     dbc.Row([
-                        dbc.Col(html.Label("VALOR OPÇÃO", className="label"), width=4, style={'padding': '5px'}),
-                        dbc.Col(dcc.Input(id='alterar-valor-opcao', type='number', step='0.01', className="form-control"), width=6, style={'padding': '5px'}),
-                        dbc.Col(html.Div(id='alterar-valor-opcao-val', className="validation-col text-center"), width=2, style={'padding': '5px'}),
-                    ], style={'marginBottom': '15px', 'alignItems': 'center'}),
+                        dbc.Col(html.Label("VALOR OPÇÃO (abertura)", className="label"), width=4),
+                        dbc.Col(html.Span(id='alterar-valor-opcao', className="form-control", style={'backgroundColor': '#e9ecef', 'padding': '6px'}), width=6),
+                    ], className='mb-2'),
                     dbc.Row([
-                        dbc.Col(html.Label("DATA OP", className="label"), width=4, style={'padding': '5px'}),
-                        dbc.Col(dcc.Input(id='alterar-data-op', type='text', placeholder='DD/MM/YYYY', className="form-control"), width=6, style={'padding': '5px'}),
-                        dbc.Col(html.Div(id='alterar-data-op-val', className="validation-col text-center"), width=2, style={'padding': '5px'}),
-                    ], style={'marginBottom': '15px', 'alignItems': 'center'}),
+                        dbc.Col(html.Label("DATA OP (abertura)", className="label"), width=4),
+                        dbc.Col(html.Span(id='alterar-data-op', className="form-control", style={'backgroundColor': '#e9ecef', 'padding': '6px'}), width=6),
+                    ], className='mb-2'),
                     dbc.Row([
-                        dbc.Col(html.Label("DATA EXERC", className="label"), width=4, style={'padding': '5px'}),
-                        dbc.Col(html.Span(id='alterar-data-exerc', className="form-control", style={'backgroundColor': '#e9ecef', 'padding': '6px'}), width=6, style={'padding': '5px'}),
-                        dbc.Col(html.Div(id='alterar-data-exerc-val', className="validation-col text-center"), width=2, style={'padding': '5px'}),
-                    ], style={'marginBottom': '15px', 'alignItems': 'center'}),
+                        dbc.Col(html.Label("DATA EXERC", className="label"), width=4),
+                        dbc.Col(html.Span(id='alterar-data-exerc', className="form-control", style={'backgroundColor': '#e9ecef', 'padding': '6px'}), width=6),
+                    ], className='mb-2'),
                     dbc.Row([
-                        dbc.Col(html.Label("ESTRUTURA", className="label"), width=4, style={'padding': '5px'}),
-                        dbc.Col(dcc.Input(id='alterar-estrutura', type='text', className="form-control"), width=6, style={'padding': '5px'}),
-                        dbc.Col(html.Div(id='alterar-estrutura-val', className="validation-col text-center"), width=2, style={'padding': '5px'}),
-                    ], style={'marginBottom': '15px', 'alignItems': 'center'}),
+                        dbc.Col(html.Label("ESTRUTURA", className="label"), width=4),
+                        dbc.Col(dcc.Input(id='alterar-estrutura', type='text', className="form-control"), width=6),
+                    ], className='mb-2'),
                     dbc.Row([
-                        dbc.Col(html.Label("ROLAGEM", className="label"), width=4, style={'padding': '5px'}),
-                        dbc.Col(dcc.Input(id='alterar-rolagem', type='text', className="form-control"), width=6, style={'padding': '5px'}),
-                        dbc.Col(html.Div(id='alterar-rolagem-val', className="validation-col text-center"), width=2, style={'padding': '5px'}),
-                    ], style={'marginBottom': '15px', 'alignItems': 'center'}),
+                        dbc.Col(html.Label("ROLAGEM", className="label"), width=4),
+                        dbc.Col(dcc.Input(id='alterar-rolagem', type='text', className="form-control"), width=6),
+                    ]),
                     html.Hr(),
-                    dbc.Row([
-                        dbc.Col(html.Div(id='modal-alterar-mensagem', className="alert alert-info"), width=12)
-                    ])
+                    dbc.Row([dbc.Col(html.Div(id='modal-alterar-mensagem', className="alert alert-info"), width=12)])
                 ]),
             ]),
             dbc.ModalFooter([
@@ -273,7 +253,8 @@ app.layout = dbc.Container([
         is_open=False,
         size="md",
     ),
-    # Modal para Encerrar Operação
+
+    # Modal Encerrar Operação
     dbc.Modal(
         [
             dbc.ModalHeader("Encerrar Operação", close_button=True),
@@ -336,10 +317,12 @@ app.layout = dbc.Container([
         id='modal-encerrar-operacao',
         is_open=False,
         size="md",
-    )
+    ),
 ], fluid=True, className="px-4")
 
+# Registra callbacks
+from app_callbacks import register_callbacks
+register_callbacks(app)
+
 if __name__ == '__main__':
-    from app_callbacks import register_callbacks
-    register_callbacks(app)
     app.run(debug=True)
