@@ -55,7 +55,7 @@ def _filter_periodo(df: pd.DataFrame, col_data: str, start_iso: Optional[str], e
     start_dt = datetime.fromisoformat(start_iso) if start_iso else None
     end_dt = datetime.fromisoformat(end_iso) if end_iso else None
     dcol = df[col_data].apply(_to_dt)
-    mask = pd.Series([True]*len(df))
+    mask = pd.Series(True, index=df.index)
     if start_dt:
         mask &= dcol >= start_dt
     if end_dt:
@@ -81,6 +81,7 @@ def cards_gp(periodo_start_iso: Optional[str], periodo_end_iso: Optional[str]) -
     enc = get_encerradas()
     if enc.empty:
         return ("R$ 0,00", "R$ 0,00")
+    enc = enc.copy()
     enc.rename(columns={'data_encerr': 'DATA ENCERR'}, inplace=True)
     encp = _filter_periodo(enc, 'DATA ENCERR', periodo_start_iso, periodo_end_iso)
     if encp.empty:
@@ -98,6 +99,7 @@ def card_fluxo(periodo_start_iso: Optional[str], periodo_end_iso: Optional[str])
         txp = _filter_periodo(tx, 'DATA OP', periodo_start_iso, periodo_end_iso)
         total += float(txp['VALOR OPERAÇÃO'].sum()) if not txp.empty else 0.0
     if not enc.empty:
+        enc = enc.copy()
         enc.rename(columns={'data_encerr': 'DATA ENCERR'}, inplace=True)
         encp = _filter_periodo(enc, 'DATA ENCERR', periodo_start_iso, periodo_end_iso)
         if not encp.empty and 'valor_oper_encerr' in encp.columns:

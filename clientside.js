@@ -1,92 +1,110 @@
-// Clientside.js
+// assets/clientside.js
 
-// Namespace do Dash (seguro)
 if (!window.dash_clientside) {
   window.dash_clientside = {};
-}
-if (typeof window.dash_clientside.no_update === 'undefined') {
-  window.dash_clientside.no_update = {};
 }
 
 console.log('Tentativa de carregar Clientside.js');
 console.log('dash_clientside encontrado:', window.dash_clientside);
 console.log('Clientside.js loaded');
 
-// Estado interno seguro
+function NO_UPDATE_N(n) {
+  const nu = window.dash_clientside.no_update;
+  return Array.from({ length: n }, () => nu);
+}
+
 let hasFocusedTicker = false;
 
-// Funções expostas a clientside_callback
 window.dash_clientside.clientside = {
-  // Foca o campo TICKER quando o modal Nova abre
+  // Dá foco no campo TICKER ao abrir o modal Nova
   focusTicker: function (is_open) {
     try {
-      if (is_open && !hasFocusedTicker) {
-        let attempts = 0;
-        const iv = setInterval(() => {
-          const el = document.getElementById('nova-ticker');
-          if (el) {
-            el.focus();
-            hasFocusedTicker = true;
-            clearInterval(iv);
-          } else if (attempts > 10) {
-            clearInterval(iv);
-          }
-          attempts++;
-        }, 60);
+      if (is_open) {
+        if (!hasFocusedTicker) {
+          let attempts = 0;
+          const iv = setInterval(() => {
+            const el = document.getElementById('nova-ticker');
+            if (el) {
+              el.focus();
+              hasFocusedTicker = true;
+              clearInterval(iv);
+            } else if (attempts > 20) {
+              clearInterval(iv);
+            }
+            attempts++;
+          }, 60);
+        }
+      } else {
+        hasFocusedTicker = false;
       }
     } catch (e) {
       console.error('Erro em focusTicker:', e);
     }
-    return window.dash_clientside.no_update;
+    return Date.now(); // pulso para Store
   },
 
-  // Extrai operação, data de exercício e strike a partir do TICKER
+  // Extrai OPERAÇÃO e DATA EXERC a partir do TICKER
+  // 2 outputs: nova-operacao.value, nova-data-exerc.value
   extractInfo: function (is_open, ticker) {
-    if (!is_open || !ticker || ticker.length < 6) {
-      return window.dash_clientside.no_update;
-    }
-    try {
-      const empresa = ticker.slice(0, 4).toUpperCase();
-      const serie = ticker.charAt(4).toUpperCase();
-      let numero = ticker.slice(5);
-      let semana = 3;
-      let isWeekly = false;
+    if (!is_open) return NO_UPDATE_N(2);
 
-      if (numero.includes('W')) {
-        const parts = numero.split('W');
-        numero = parts[0];
-        semana = parseInt(parts[1], 10);
-        isWeekly = true;
-        if (![1, 2, 4, 5].includes(semana)) {
-          return window.dash_clientside.no_update;
-        }
+    if (!ticker || String(ticker).trim().length < 6) {
+      return ["", ""]; // limpa visualmente
+    }
+
+    try {
+      const t = String(ticker).toUpperCase().trim();
+      const serie = t.charAt(4);
+      let sufixo = t.slice(5);
+
+      // Semanais W1/W2/W4/W5
+      let semana = null, isWeekly = false;
+      if (sufixo.includes("W")) {
+        const parts = sufixo.split("W");
+        sufixo = parts[0];
+        const w = parseInt(parts[1], 10);
+        if ([1, 2, 4, 5].includes(w)) { semana = w; isWeekly = true; }
+        else { return ["", ""]; }
       }
 
+      // A-L (1..12), M-X (1..12)
       const mesMap = {
         A: 1, B: 2, C: 3, D: 4, E: 5, F: 6, G: 7, H: 8, I: 9, J: 10, K: 11, L: 12,
         M: 1, N: 2, O: 3, P: 4, Q: 5, R: 6, S: 7, T: 8, U: 9, V: 10, W: 11, X: 12
       };
       const mes = mesMap[serie];
-      if (!mes) return window.dash_clientside.no_update;
+      if (!mes) return ["", ""];
 
-      const operacao = 'MNOPQRSTUVWX'.includes(serie) ? 'Put' : 'Call';
-      const strike = parseFloat(numero) > 0 ? parseFloat(numero) : '';
+      // OPERAÇÃO: Call ou Put
+      const operacao = "MNOPQRSTUVWX".includes(serie) ? "Put" : "Call";
 
-      // Data de exercício (heurística simples)
-      const ano = new Date().getFullYear();
-      const primeiroDiaMes = new Date(ano, mes - 1, 1);
-      let dataExerc = new Date(primeiroDiaMes.getTime() + (semana - 1) * 7 * 24 * 60 * 60 * 1000);
-      if (isWeekly) {
-        while (dataExerc.getDay() !== 5) {
-          dataExerc = new Date(dataExerc.getTime() + 24 * 60 * 60 * 1000);
-        }
+      // Ano: até 12 meses à frente
+      const hoje = new Date();
+      const mesAtual = hoje.getMonth() + 1;
+      let ano = hoje.getFullYear();
+      if (mes < mesAtual) ano += 1;
+
+      function terceiraSexta(y, m) {
+        const d = new Date(y, m - 1, 1);
+        while (d.getDay() !== 5) d.setDate(d.getDate() + 1);
+        d.setDate(d.getDate() + 14);
+        return d;
       }
-      const dataExercStr = dataExerc.toLocaleDateString('pt-BR');
+      function sextaDaSemana(y, m, w) {
+        const d = new Date(y, m - 1, 1);
+        while (d.getDay() !== 5) d.setDate(d.getDate() + 1);
+        d.setDate(d.getDate() + (w - 1) * 7);
+        return d;
+      }
 
-      return [operacao, dataExercStr, strike];
+      let dataExerc = isWeekly ? sextaDaSemana(ano, mes, semana) : terceiraSexta(ano, mes);
+      if (dataExerc < hoje && mes === mesAtual) dataExerc.setFullYear(dataExerc.getFullYear() + 1);
+
+      const dataExercStr = dataExerc.toLocaleDateString("pt-BR");
+      return [operacao, dataExercStr];
     } catch (e) {
-      console.error('extractInfo error:', e);
-      return ['', '', ''];
+      console.error("extractInfo error:", e);
+      return NO_UPDATE_N(2);
     }
   }
 };

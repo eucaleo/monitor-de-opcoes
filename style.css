@@ -33,13 +33,25 @@ body {
     padding-right: 10px;
 }
 
-/* Altura padrão para todos os controles */
+/* Altura do controle (NÃO do menu) */
 .form-control,
 .form-control-sm,
 .Select-control {
     height: 38px !important;
     border-radius: 6px !important;
     font-size: 0.875rem !important;
+}
+
+/* Readonly em dark mode com bom contraste */
+.form-control[readonly] {
+    background-color: var(--bs-secondary-bg) !important;
+    color: var(--bs-body-color) !important;
+}
+
+/* Spans que simulam readonly */
+.form-control.readonly-display {
+    background-color: var(--bs-tertiary-bg) !important;
+    color: var(--bs-body-color) !important;
 }
 
 /* ========================================
@@ -87,12 +99,8 @@ body {
     border-color: var(--bs-border-color) !important;
 }
 
-/* Alternância e hover com variáveis */
 .dash-table-container tr:nth-child(even) td { background-color: var(--bs-tertiary-bg) !important; }
 .dash-table-container tr:hover td { background-color: var(--bs-secondary-bg) !important; }
-
-/* Esconde filtro nativo se houver */
-.dash-filter { display: none !important; }
 
 /* ========================================
    DATEPICKERRANGE
@@ -125,16 +133,44 @@ body {
 .DateRangePickerInput_arrow_svg { fill: var(--bs-body-color) !important; }
 
 /* ========================================
-   DROPDOWN (EXCEL/CSV)
+   DROPDOWN (EXCEL/CSV e DIREÇÃO)
    ======================================== */
-.Select-control,
+
+/* Controle do dropdown (altura fixa do controle) */
+.Select-control {
+    background-color: var(--bs-body-bg) !important;
+    color: var(--bs-body-color) !important;
+    border: 1px solid var(--bs-border-color) !important;
+    border-radius: 6px !important;
+}
+
+/* Menu e itens (SEM altura fixa) */
 .Select-menu-outer,
 .Select-menu {
     background-color: var(--bs-body-bg) !important;
     color: var(--bs-body-color) !important;
     border: 1px solid var(--bs-border-color) !important;
     border-radius: 6px !important;
-    height: 38px !important;
+    max-height: 240px !important; /* rola quando tiver muitas opções */
+    overflow-y: auto !important;
+}
+
+.Select-option {
+    background-color: var(--bs-body-bg) !important;
+    color: var(--bs-body-color) !important;
+}
+
+.Select-option.is-focused,
+.Select-option.is-selected {
+    background-color: var(--bs-secondary-bg) !important;
+    color: var(--bs-body-color) !important;
+}
+
+/* Texto/placeholder com contraste */
+.Select-placeholder,
+.Select-value-label,
+.Select-input > input {
+    color: var(--bs-body-color) !important;
 }
 
 .Select-value-label {

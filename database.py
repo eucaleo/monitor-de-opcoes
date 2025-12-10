@@ -5,9 +5,12 @@ import pandas as pd
 import datetime as dt
 import logging
 from typing import Optional, Tuple
+import os
 
 logging.basicConfig(level=logging.INFO)
-DB_PATH = 'transacoes.db'
+
+# Path absoluto (robusto ao cwd)
+DB_PATH = os.path.join(os.path.dirname(__file__), 'transacoes.db')
 
 def _connect() -> sqlite3.Connection:
     conn = sqlite3.connect(DB_PATH, detect_types=sqlite3.PARSE_DECLTYPES, timeout=5.0)
@@ -38,20 +41,30 @@ def init_database() -> None:
             rolagem TEXT,           -- texto livre
             vinculo_prejuizo INTEGER,
             direcao TEXT,           -- 'Compra'/'Venda' (histórico)
-            valor_atual REAL        -- preço unitário atual via Provider (opcional)
+            valor_atual REAL,       -- preço unitário atual via Provider (opcional)
+            estrutura_bundle TEXT,  -- agrupamento (2-em-1), opcional
+            perna_ordem INTEGER,    -- ordem da perna no bundle/estrutura, opcional
+            perna_papel TEXT        -- LONG_CALL/SHORT_CALL/LONG_PUT/SHORT_PUT, opcional
         )''')
 
-        # garante colunas novas em transacoes
+        # Garante colunas novas em transacoes (migração idempotente)
         c.execute("PRAGMA table_info(transacoes)")
         cols = [row[1] for row in c.fetchall()]
         if 'rolagem' not in cols:
             c.execute("ALTER TABLE transacoes ADD COLUMN rolagem TEXT")
         if 'valor_atual' not in cols:
             c.execute("ALTER TABLE transacoes ADD COLUMN valor_atual REAL")
+        if 'estrutura_bundle' not in cols:
+            c.execute("ALTER TABLE transacoes ADD COLUMN estrutura_bundle TEXT")
+        if 'perna_ordem' not in cols:
+            c.execute("ALTER TABLE transacoes ADD COLUMN perna_ordem INTEGER")
+        if 'perna_papel' not in cols:
+            c.execute("ALTER TABLE transacoes ADD COLUMN perna_papel TEXT")
 
         # índices úteis
         c.execute("CREATE INDEX IF NOT EXISTS idx_tx_ticker ON transacoes (ticker)")
         c.execute("CREATE INDEX IF NOT EXISTS idx_tx_dataop ON transacoes (data_op)")
+        c.execute("CREATE INDEX IF NOT EXISTS idx_tx_estr_bundle ON transacoes (estrutura_bundle)")
 
         # log_alteracoes
         c.execute('''CREATE TABLE IF NOT EXISTS log_alteracoes (
@@ -86,7 +99,7 @@ def init_database() -> None:
             perdas_invest REAL          -- reservado
         )''')
 
-        # migra id_origem e valor_oper_encerr se faltarem
+        # migra colunas se faltarem em encerradas
         c.execute("PRAGMA table_info(encerradas)")
         ecols = [row[1] for row in c.fetchall()]
         if 'id_origem' not in ecols:
@@ -95,7 +108,16 @@ def init_database() -> None:
             c.execute("ALTER TABLE encerradas ADD COLUMN valor_oper_encerr REAL")
         if 'rolagem' not in ecols:
             c.execute("ALTER TABLE encerradas ADD COLUMN rolagem TEXT")
+        # Nova coluna para motivo do encerramento (fase 1)
+        if 'motivo' not in ecols:
+            c.execute("ALTER TABLE encerradas ADD COLUMN motivo TEXT")
+
         c.execute("CREATE INDEX IF NOT EXISTS idx_enc_idorigem ON encerradas (id_origem)")
+        c.execute("CREATE INDEX IF NOT EXISTS idx_enc_dataenc ON encerradas (data_encerr)")
+        c.execute("CREATE INDEX IF NOT EXISTS idx_enc_estrutura ON encerradas (estrutura)")
+        c.execute("CREATE INDEX IF NOT EXISTS idx_enc_ticker ON encerradas (ticker)")
+        c.execute("CREATE INDEX IF NOT EXISTS idx_enc_direcao ON encerradas (direcao)")
+        c.execute("CREATE INDEX IF NOT EXISTS idx_enc_operacao ON encerradas (operacao)")
         conn.commit()
     logging.info("[DB] Banco pronto")
 
@@ -104,6 +126,7 @@ def _hoje_str() -> str:
 
 def get_transactions() -> pd.DataFrame:
     try:
+        init_database()
         with _connect() as conn:
             df = pd.read_sql_query(
                 """SELECT id, ticker, operacao, direcao, strike, quantidade,
@@ -135,12 +158,14 @@ def get_transactions() -> pd.DataFrame:
 
 def get_encerradas() -> pd.DataFrame:
     try:
+        init_database()
         with _connect() as conn:
             df = pd.read_sql_query(
                 """SELECT id, id_origem, ticker, operacao, direcao, strike,
                           quantidade, valor_opcao, valor_operacao, data_op,
                           data_exerc, estrutura, rolagem, data_encerr,
-                          valor_encerr, valor_oper_encerr, g_p, perdas_invest
+                          valor_encerr, valor_oper_encerr, g_p, perdas_invest,
+                          motivo
                    FROM encerradas""",
                 conn
             )
@@ -162,17 +187,20 @@ def add_operation(
     ticker: str,
     operacao: str,      # 'Call'/'Put'
     direcao: str,       # 'Compra'/'Venda'
-    strike: float,
+    strike: Optional[float],
     quantidade: int,    # valor absoluto informado no formulário
     valor_opcao: float, # unitário positivo
     data_exerc: str,
     estrutura: Optional[str],
-    rolagem: Optional[str]
+    rolagem: Optional[str],
+    data_op: Optional[str] = None   # usa se válido, senão hoje
 ) -> int:
     init_database()
     sign_qtd, sign_cash = _calc_signals(direcao)
     quantidade_norm = sign_qtd * abs(int(quantidade))
     valor_operacao = sign_cash * abs(float(valor_opcao)) * abs(int(quantidade))
+
+    data_op_final = data_op if (isinstance(data_op, str) and len(data_op) == 10) else _hoje_str()
 
     with _connect() as conn:
         c = conn.cursor()
@@ -189,13 +217,13 @@ def add_operation(
                 quantidade_norm,
                 abs(float(valor_opcao)),
                 data_exerc,
-                _hoje_str(),
+                data_op_final,
                 valor_operacao,
                 (estrutura or None),
                 (rolagem or None),
                 None,
                 direcao,
-                None
+                None  # valor_atual permanece NULL até integração
             )
         )
         new_id = c.lastrowid
@@ -204,7 +232,7 @@ def add_operation(
             """INSERT INTO log_alteracoes
                (transacao_id, campo_alterado, valor_antigo, valor_novo, tipo_alteracao, data_alteracao)
                VALUES (?,?,?,?,?,?)""",
-            (new_id, 'INSERCAO', '', f'{ticker}/{operacao}/{direcao}', 'INSERCAO', _hoje_str())
+            (new_id, 'INSERCAO', '', f'{ticker}/{operacao}/{direcao}', 'INSERCAO', data_op_final)
         )
         conn.commit()
         logging.info(f"[DB] Nova operação id={new_id} inserida")
@@ -219,7 +247,7 @@ def update_operation(
     """
     Editáveis: quantidade, estrutura, rolagem.
     data_op e valor_opcao NÃO editáveis aqui.
-    Recalcula valor_operacao se quantidade mudar (coerência com correção do lançamento).
+    Recalcula valor_operacao se quantidade mudar.
     """
     with _connect() as conn:
         c = conn.cursor()
@@ -269,7 +297,8 @@ def close_operation(
     qtd_encerrada: int,        # absoluto
     valor_encerr_unit: float,  # unitário positivo
     data_encerr: str,
-    rolagem_texto: Optional[str] = None
+    rolagem_texto: Optional[str] = None,
+    motivo_encerr: Optional[str] = None
 ) -> int:
     """
     Encerramento parcial/total.
@@ -317,13 +346,14 @@ def close_operation(
             """INSERT INTO encerradas
                (id_origem, ticker, operacao, direcao, strike, quantidade,
                 valor_opcao, valor_operacao, data_op, data_exerc, estrutura, rolagem,
-                data_encerr, valor_encerr, valor_oper_encerr, g_p, perdas_invest)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                data_encerr, valor_encerr, valor_oper_encerr, g_p, perdas_invest, motivo)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             (
                 tid, ticker, operacao, direcao, strike, qtd,
                 valor_opcao, cash_open_part, data_op, data_exerc, estrutura,
                 (rolagem_texto or rolagem_old),
-                data_encerr, abs(float(valor_encerr_unit)), cash_close_part, gp_part, None
+                data_encerr, abs(float(valor_encerr_unit)), cash_close_part, gp_part, None,
+                motivo_encerr
             )
         )
         encerr_id = c.lastrowid
